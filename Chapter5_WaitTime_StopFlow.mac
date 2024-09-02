@@ -1,0 +1,149 @@
+###########################################################
+# Command to wait a fixed amount of time.
+###########################################################
+
+procedure(WaitTime_StopFlow_v2, parameters=null)
+
+   if(EditIfShiftPressed(getmacropath(),getmacroname()))
+      return
+   else
+     parameters = ["waitTimeValue=1"] 
+     (ctrlLayout, plotLayout) = :interface()
+     gExpt->addExperiment(getmacropath(),"WaitTime_StopFlow_v2", parameters, ctrlLayout, plotLayout)
+   endif
+
+endproc()
+
+
+###########################################################
+# The interface control(s) required by Expert when loading
+# data from a experimental result. A string type allows
+# loop numbers like 'lc1'
+###########################################################
+
+procedure(interface)
+
+   ctrlLayout = ["waitTimeValue","Wait time (s)","tb","float",""]
+   plotLayout = listto2d(["pt1"])
+
+endproc(ctrlLayout, plotLayout)
+
+###########################################################
+# Add the WaitTime_StopFlow command to the batch list
+###########################################################
+
+procedure(addCommand)
+     
+   assignlist(getctrlvalues(0))
+   entry = "WaitTime_StopFlow_v2|$waitTimeValue$ s"
+
+endproc(entry)
+
+###########################################################
+# The user has changed the sample name in the parameter
+# list so update the file comment to match and also the
+# acqu.par file and batch folder name.
+###########################################################
+
+procedure(parameterChanged,protocol,comment,exptNr)
+
+  assignlist(getctrlvalues(0))
+  gBatch->saveCurrentParameters(protocol,comment,exptNr)
+  gBatch->renameSingleProtocol(protocol,comment,exptNr,"$waitTimeValue$ s")
+
+endproc()
+
+###########################################################
+# Rename the WaitTime value
+###########################################################
+
+procedure(renameCommand, entry)
+
+  assignlist(getctrlvalues(0))
+  entry = "WaitTime_StopFlow_v2|$waitTimeValue$ s"   
+
+endproc(entry)
+
+###########################################################
+# Execute the WaitTime_StopFlow_v2 command
+###########################################################
+
+procedure(backdoor, parameters)
+
+   t1 = time()
+
+   assignstruct(parameters)
+
+#Arduino Setup
+
+#Arduino Parameters
+   port = "com5"
+   baudrate = 9600
+   databits = 8
+   parity = "none"
+   stopbit = "1"
+
+#Arduino Commands
+   RUN = "1"
+   TIME = "2"
+   DELAY = "3"
+   RUND = "4"
+   TIMED = "5"
+
+#Arduino Intialise
+serialmode("sync")
+openserial(port,baudrate,databits,parity,stopbit)
+readserial(port,"\n")
+pause(100/1000)
+
+#Start flow loop
+start1 = time()
+writeserial(port,RUN)
+
+#Arduino Shutdown
+#closeserial(port)   
+
+   while(time()-t1 < waitTimeValue) # Loop for waittime
+      if(wvExpStatus == "stop")
+         return
+     endif
+     pause(0.1)
+   endwhile
+
+#Stop flow loop
+writeserial(port,RUN)
+end1 = time()
+
+# Determine Flow Delays
+  writeserial(port,TIME)
+  pause(1)
+  dur_arduino = readserial(port,"\n")
+  dur_arduino = scanstr(dur_arduino,"%1\r")
+  dur_arduino2 = eval(dur_arduino)
+  dur_arduino2 = dur_arduino2/1000
+  
+   
+  dur_spinsolve = end1 - start1
+
+  dur = matrix(2)
+  dur[0] = dur_spinsolve
+  dur[1] = dur_arduino2
+
+   print("\n ------------- Timing Data -------------\n")
+   print("\n Spinsolve / s \t Arduino / s \t\n")
+   print("\n$dur[0]$\t\t$dur[1]$\t\t\n")
+
+#Arduino Shutdown
+closeserial(port) 
+
+endproc()
+
+########################################################
+# Return expected experiment duration based on comment
+########################################################
+
+procedure(expectedDuration, guipar)
+
+   assignstruct(guipar) 
+
+endproc(waitTimeValue)
